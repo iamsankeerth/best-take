@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { blobToBase64 } from '@/lib/imageUtils';
 
-const MODEL_VERSION = 'gemini-1.5-pro'; // Using pro for better vision capabilities
+const MODEL_VERSION = 'gemini-3-pro-preview'; // Using Gemini 3 Pro for best vision capabilities
 
 export function createGeminiClient(apiKey: string) {
     const genAI = new GoogleGenerativeAI(apiKey);
