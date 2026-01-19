@@ -1,65 +1,135 @@
-import Image from "next/image";
+'use client';
+
+import { useEffect, useState } from 'react';
+import { ApiKeyInput } from '@/components/ApiKeyInput';
+import { PhotoUpload } from '@/components/PhotoUpload';
+import { FaceSelector } from '@/components/FaceSelector';
+import { ProcessingOverlay } from '@/components/ProgressSteps';
+import { useAppStore } from '@/store/useAppStore';
+import { ImageIcon, Settings, Trash2 } from 'lucide-react';
+
+type AppStep = 'api-key' | 'upload' | 'processing' | 'edit';
 
 export default function Home() {
+  const {
+    apiKey,
+    initialize,
+    photos,
+    faceGroups,
+    processingStage,
+    setApiKey,
+    reset
+  } = useAppStore();
+
+  const [showSettings, setShowSettings] = useState(false);
+
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
+
+  // Determine current step
+  const getCurrentStep = (): AppStep => {
+    if (!apiKey) return 'api-key';
+    if (processingStage !== 'idle' && processingStage !== 'complete' && processingStage !== 'error') {
+      return 'processing';
+    }
+    if (faceGroups.length > 0) return 'edit';
+    return 'upload';
+  };
+
+  const currentStep = getCurrentStep();
+
+  const handleClearApiKey = () => {
+    localStorage.removeItem('gemini_api_key');
+    setApiKey('');
+    reset();
+    setShowSettings(false);
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <main className="min-h-screen bg-black text-white relative overflow-hidden">
+
+      {/* Background Ambience */}
+      <div className="fixed top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-600/20 rounded-full blur-[120px] pointer-events-none" />
+      <div className="fixed bottom-[-10%] right-[-5%] w-[40%] h-[40%] bg-purple-600/10 rounded-full blur-[100px] pointer-events-none" />
+
+      <div className="max-w-7xl mx-auto px-6 py-6 relative z-10">
+
+        {/* Header */}
+        <header className="flex items-center justify-between mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-tr from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+              <ImageIcon className="text-white" size={20} />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">BestTake</h1>
+              <p className="text-xs text-secondary-text">Create perfect group photos</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {apiKey && (
+              <>
+                <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-full border border-white/10 text-xs text-white/50">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                  API Connected
+                </div>
+                <button
+                  onClick={() => setShowSettings(!showSettings)}
+                  className="p-2 rounded-lg hover:bg-white/10 transition-colors text-secondary-text hover:text-white"
+                >
+                  <Settings size={18} />
+                </button>
+              </>
+            )}
+          </div>
+        </header>
+
+        {/* Settings Dropdown */}
+        {showSettings && (
+          <div className="absolute right-6 top-20 w-64 bg-surface border border-white/10 rounded-xl p-4 shadow-xl z-50 animate-in slide-in-from-top-2 duration-200">
+            <h3 className="text-sm font-medium mb-3">Settings</h3>
+            <button
+              onClick={handleClearApiKey}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+            >
+              <Trash2 size={16} />
+              Clear API Key
+            </button>
+          </div>
+        )}
+
+        {/* Main Content */}
+        <div className="min-h-[calc(100vh-8rem)]">
+          {currentStep === 'api-key' && (
+            <div className="flex items-center justify-center h-[60vh]">
+              <ApiKeyInput />
+            </div>
+          )}
+
+          {currentStep === 'upload' && (
+            <PhotoUpload />
+          )}
+
+          {currentStep === 'edit' && (
+            <FaceSelector />
+          )}
+        </div>
+
+        {/* Processing Overlay */}
+        {currentStep === 'processing' && (
+          <ProcessingOverlay stage={processingStage} />
+        )}
+
+      </div>
+
+      {/* Click outside to close settings */}
+      {showSettings && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setShowSettings(false)}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      )}
+    </main>
   );
 }
