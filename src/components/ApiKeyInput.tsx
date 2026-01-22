@@ -12,7 +12,11 @@ export function ApiKeyInput() {
     const [isFocused, setIsFocused] = useState(false);
 
     useEffect(() => {
-        if (apiKey) setInputValue(apiKey);
+        if (apiKey) {
+            setInputValue(apiKey);
+        } else {
+            setInputValue('');
+        }
     }, [apiKey]);
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -50,11 +54,13 @@ export function ApiKeyInput() {
                         onFocus={() => setIsFocused(true)}
                         onBlur={() => setIsFocused(false)}
                         placeholder="AIzaSy..."
+                        suppressHydrationWarning
                         className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 pr-12 text-white placeholder-white/20 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all font-mono text-sm"
                     />
                     <button
                         type="button"
                         onClick={() => setIsVisible(!isVisible)}
+                        suppressHydrationWarning
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors"
                     >
                         {isVisible ? <EyeOff size={18} /> : <Eye size={18} />}

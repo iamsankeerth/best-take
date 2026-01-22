@@ -18,13 +18,16 @@ export default function Home() {
     faceGroups,
     processingStage,
     setApiKey,
+    clearApiKey,
     reset
   } = useAppStore();
 
   const [showSettings, setShowSettings] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     initialize();
+    setMounted(true);
   }, [initialize]);
 
   // Determine current step
@@ -40,11 +43,30 @@ export default function Home() {
   const currentStep = getCurrentStep();
 
   const handleClearApiKey = () => {
-    localStorage.removeItem('gemini_api_key');
-    setApiKey('');
+    clearApiKey();
     reset();
     setShowSettings(false);
   };
+
+  // Prevent hydration mismatch by not rendering step-specific UI until mounted
+  if (!mounted) {
+    return (
+      <main className="min-h-screen bg-black text-white relative overflow-hidden">
+        <div className="max-w-7xl mx-auto px-6 py-6 relative z-10">
+          <header className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-tr from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                <ImageIcon className="text-white" size={20} />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight">BestTake</h1>
+              </div>
+            </div>
+          </header>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-black text-white relative overflow-hidden">

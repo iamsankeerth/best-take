@@ -44,6 +44,7 @@ export function PhotoUpload() {
 
                 // Resize
                 const resized = await resizeImage(processedFile);
+                const dims = await getImageDimensions(resized);
 
                 // Create URL
                 const url = URL.createObjectURL(resized);
@@ -54,8 +55,8 @@ export function PhotoUpload() {
                     file: resized,
                     url,
                     uploadedAt: new Date(),
-                    width: 0,
-                    height: 0
+                    width: dims.width,
+                    height: dims.height
                 });
 
             } catch (err) {
@@ -80,28 +81,44 @@ export function PhotoUpload() {
                 photos.map(p => p.file)
             );
 
+            console.log('Gemini Raw Result:', result);
+
             // Process result into FaceGroups
-            // Group faces by personId from the API response
             const groupedByPerson = new Map<string, DetectedFace[]>();
 
-            for (const face of result.faces) {
-                const personId = (face as any).personId || `person_${face.id}`;
+            if (!result.faces || !Array.isArray(result.faces)) {
+                throw new Error('Invalid response from AI: No faces detected.');
+            }
+
+            for (const item of result.faces) {
+                const personId = item.personId || `person_${Math.random().toString(36).substr(2, 9)}`;
                 if (!groupedByPerson.has(personId)) {
                     groupedByPerson.set(personId, []);
                 }
 
-                // Map to our internal structure
+                const photoIndex = typeof item.photoIndex === 'number' ? item.photoIndex : 0;
+                const photo = photos[photoIndex];
+                if (!photo) continue;
+
+                // box_2d is [ymin, xmin, ymax, xmax]
+                if (!Array.isArray(item.box_2d) || item.box_2d.length < 4) {
+                    console.warn('Invalid box_2d format for face', item);
+                    continue;
+                }
+
+                const [ymin, xmin, ymax, xmax] = item.box_2d;
+
                 const mappedFace: DetectedFace = {
-                    id: face.id,
-                    photoId: photos[face.photoIndex]?.id || '',
+                    id: crypto.randomUUID(),
+                    photoId: photo.id,
                     boundingBox: {
-                        x: ((face.boundingBox as any).xmin || 0) / 1000,
-                        y: ((face.boundingBox as any).ymin || 0) / 1000,
-                        width: (((face.boundingBox as any).xmax || 0) - ((face.boundingBox as any).xmin || 0)) / 1000,
-                        height: (((face.boundingBox as any).ymax || 0) - ((face.boundingBox as any).ymin || 0)) / 1000
+                        x: xmin / 1000,
+                        y: ymin / 1000,
+                        width: (xmax - xmin) / 1000,
+                        height: (ymax - ymin) / 1000
                     },
-                    thumbnailUrl: photos[face.photoIndex]?.url || '', // For MVP, use full photo
-                    confidence: (face as any).score || 0.8
+                    thumbnailUrl: photo.url,
+                    confidence: item.score ?? 0.8
                 };
 
                 groupedByPerson.get(personId)!.push(mappedFace);

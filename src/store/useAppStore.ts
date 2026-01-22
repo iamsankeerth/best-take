@@ -5,6 +5,7 @@ interface AppState {
     // API Key
     apiKey: string | null;
     setApiKey: (key: string) => void;
+    clearApiKey: () => void;
 
     // Photos
     photos: Photo[];
@@ -82,6 +83,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     setApiKey: (key) => {
         customStorage.setItem('gemini_api_key', key);
         set({ apiKey: key });
+    },
+
+    clearApiKey: () => {
+        customStorage.removeItem('gemini_api_key');
+        set({ apiKey: null });
     },
 
     photos: [],

@@ -109,40 +109,64 @@ export function FaceSelector() {
             </div>
 
             {/* Main Photo Area */}
-            <div className="flex-1 relative bg-black rounded-2xl overflow-hidden flex items-center justify-center">
-                <img
-                    src={basePhoto.url}
-                    alt="Base photo"
-                    className="max-w-full max-h-full object-contain"
-                />
+            <div className="flex-1 relative bg-neutral-950 rounded-2xl overflow-hidden flex items-center justify-center p-4">
+                <div
+                    className="relative transition-all duration-700 ease-in-out inline-block"
+                    style={selectedPersonId ? {
+                        transform: `scale(2.5) translate(${(() => {
+                            const group = faceGroups.find(g => g.personId === selectedPersonId);
+                            const face = group?.faces.find(f => f.photoId === basePhoto.id);
+                            if (!face) return '0%, 0%';
+                            const centerX = face.boundingBox.x + face.boundingBox.width / 2;
+                            const centerY = face.boundingBox.y + face.boundingBox.height / 2;
+                            return `${(0.5 - centerX) * 100}%, ${(0.5 - centerY) * 100}%`;
+                        })()})`,
+                        transformOrigin: 'center center'
+                    } : {}}
+                >
+                    <img
+                        src={basePhoto.url}
+                        alt="Base photo"
+                        className="max-w-full max-h-[70vh] block pointer-events-none rounded-lg shadow-2xl"
+                    />
 
-                {/* Face highlight overlays would go here */}
-                {faceGroups.map((group) => {
-                    const selectedFace = group.faces.find(f => f.photoId === basePhoto.id);
-                    if (!selectedFace) return null;
+                    {/* Face highlight overlays */}
+                    {faceGroups.map((group) => {
+                        const selectedFace = group.faces.find(f => f.photoId === basePhoto.id);
+                        if (!selectedFace) return null;
 
-                    const bb = selectedFace.boundingBox;
-                    const isThisPersonSelected = selectedPersonId === group.personId;
+                        const bb = selectedFace.boundingBox;
+                        const isThisPersonSelected = selectedPersonId === group.personId;
 
-                    return (
-                        <button
-                            key={group.personId}
-                            onClick={() => setSelectedPersonId(isThisPersonSelected ? null : group.personId)}
-                            className={cn(
-                                "absolute border-2 rounded-lg transition-all duration-200 cursor-pointer",
-                                isThisPersonSelected
-                                    ? "border-accent bg-accent/20"
-                                    : "border-transparent hover:border-white/50 hover:bg-white/10"
-                            )}
-                            style={{
-                                left: `${bb.x * 100}%`,
-                                top: `${bb.y * 100}%`,
-                                width: `${bb.width * 100}%`,
-                                height: `${bb.height * 100}%`
-                            }}
-                        />
-                    );
-                })}
+                        // ASPECT-RATIO AWARE CIRCLE MATH
+                        const ar = basePhoto.width / basePhoto.height;
+                        const highlightSize = Math.max(bb.width, bb.height / ar) * 1.25;
+
+                        const hleft = bb.x + (bb.width / 2) - (highlightSize / 2);
+                        const htop = bb.y + (bb.height / 2) - (highlightSize / 2) * ar;
+
+                        return (
+                            <button
+                                key={group.personId}
+                                onClick={() => setSelectedPersonId(isThisPersonSelected ? null : group.personId)}
+                                className={cn(
+                                    "absolute border-2 transition-all duration-300 cursor-pointer rounded-full",
+                                    isThisPersonSelected
+                                        ? "border-accent ring-[8px] ring-accent/30 bg-accent/5 shadow-[0_0_60px_rgba(59,130,246,0.9)]"
+                                        : "border-white/30 hover:border-white/70 hover:bg-white/10"
+                                )}
+                                style={{
+                                    left: `${hleft * 100}%`,
+                                    top: `${htop * 100}%`,
+                                    width: `${highlightSize * 100}%`,
+                                    aspectRatio: '1/1',
+                                    transform: isThisPersonSelected ? 'scale(1.1)' : 'scale(1)',
+                                    zIndex: isThisPersonSelected ? 20 : 10
+                                }}
+                            />
+                        );
+                    })}
+                </div>
             </div>
 
             {/* Face Strip */}
@@ -159,6 +183,8 @@ export function FaceSelector() {
                             <FaceThumbnail
                                 key={group.personId}
                                 imageUrl={bestFace?.thumbnailUrl || basePhoto.url}
+                                boundingBox={bestFace?.boundingBox}
+                                aspectRatio={basePhoto.width / basePhoto.height}
                                 isSelected={isSelected}
                                 onClick={() => setSelectedPersonId(isSelected ? null : group.personId)}
                             />
@@ -181,6 +207,8 @@ export function FaceSelector() {
                                     <div key={face.id} className="flex flex-col items-center gap-1">
                                         <FaceThumbnail
                                             imageUrl={face.thumbnailUrl}
+                                            boundingBox={face.boundingBox}
+                                            aspectRatio={basePhoto.width / basePhoto.height}
                                             isSelected={isCurrentSelection}
                                             isHighlighted={isBestMatch && !isCurrentSelection}
                                             confidence={face.confidence}
