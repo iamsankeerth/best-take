@@ -14,6 +14,18 @@ export interface BoundingBox {
     height: number;
 }
 
+export interface FaceLandmark {
+    x: number; // Normalized 0-1
+    y: number;
+}
+
+export interface FaceLandmarks {
+    leftEye: FaceLandmark;
+    rightEye: FaceLandmark;
+    nose: FaceLandmark;
+    mouth: FaceLandmark;
+}
+
 export interface DetectedFace {
     id: string;
     photoId: string;
@@ -21,6 +33,7 @@ export interface DetectedFace {
     thumbnailUrl: string;
     confidence: number;
     embedding?: number[];
+    landmarks?: FaceLandmarks;
 }
 
 export interface FaceGroup {

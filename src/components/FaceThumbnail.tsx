@@ -66,12 +66,12 @@ export function FaceThumbnail({
         <button
             onClick={onClick}
             className={cn(
-                "relative rounded-full overflow-hidden transition-all duration-200 flex-shrink-0 bg-neutral-900",
+                "relative rounded-full overflow-hidden transition-all duration-200 flex-shrink-0 bg-black/5",
                 sizeClasses[size],
-                isSelected && "ring-4 ring-accent ring-offset-4 ring-offset-black scale-105 z-10",
-                isHighlighted && "ring-2 ring-white/50",
-                !isSelected && !isHighlighted && "ring-2 ring-white/10 hover:ring-white/30",
-                "hover:scale-105 active:scale-95 shadow-xl"
+                isSelected && "ring-4 ring-accent ring-offset-4 ring-offset-background scale-105 z-10",
+                isHighlighted && "ring-2 ring-accent/40",
+                !isSelected && !isHighlighted && "ring-2 ring-black/10 hover:ring-black/30",
+                "hover:scale-105 active:scale-95 shadow-sm"
             )}
         >
             <div className="w-full h-full overflow-hidden flex items-center justify-center pointer-events-none relative">
@@ -87,12 +87,12 @@ export function FaceThumbnail({
             <div className={cn(
                 "absolute inset-0 pointer-events-none transition-opacity duration-300",
                 isSelected ? "opacity-100" : "opacity-0",
-                "bg-gradient-to-t from-accent/30 to-transparent"
+                "bg-gradient-to-t from-accent/20 to-transparent"
             )} />
 
             {/* Confidence indicator bar */}
             {confidence !== undefined && (
-                <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/20 overflow-hidden">
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/10 overflow-hidden">
                     <div
                         className={cn(
                             "h-full transition-all duration-1000",

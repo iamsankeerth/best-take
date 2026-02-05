@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { FaceThumbnail } from './FaceThumbnail';
 import { cn } from '@/lib/utils';
 import { Undo2, Redo2, RotateCcw, Download, Share2, Eye, EyeOff } from 'lucide-react';
+import { buildCompositeImage } from '@/lib/compositor';
 
 export function FaceSelector() {
     const {
@@ -18,10 +19,21 @@ export function FaceSelector() {
         redoStack,
         isComparing,
         setComparing,
-        reset
+        reset,
+        compositeUrl,
+        setCompositeUrl,
+        setError
     } = useAppStore();
 
     const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
+    const [isCompositing, setIsCompositing] = useState(false);
+    const lastCompositeRun = useRef(0);
+
+    useEffect(() => {
+        if (faceGroups.length > 0) {
+            setSelectedPersonId(faceGroups[0].personId);
+        }
+    }, [faceGroups]);
 
     // Get base photo
     const basePhoto = photos.find(p => p.id === currentSelection?.basePhotoId);
@@ -29,21 +41,54 @@ export function FaceSelector() {
     // Get faces for selected person
     const selectedPersonGroup = faceGroups.find(g => g.personId === selectedPersonId);
 
+    useEffect(() => {
+        if (!basePhoto || !currentSelection || faceGroups.length === 0) return;
+
+        let cancelled = false;
+        const runId = ++lastCompositeRun.current;
+        const build = async () => {
+            try {
+                setIsCompositing(true);
+
+                const blob = await buildCompositeImage(photos, faceGroups, currentSelection);
+                if (cancelled || runId !== lastCompositeRun.current) return;
+
+                const url = URL.createObjectURL(blob);
+                setCompositeUrl(url);
+                setError(null);
+            } catch (err: unknown) {
+                if (cancelled) return;
+                console.error('Composite failed', err);
+                const message = err instanceof Error ? err.message : 'Failed to build composite';
+                setError(message);
+            } finally {
+                if (!cancelled) setIsCompositing(false);
+            }
+        };
+
+        build();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [basePhoto, currentSelection, faceGroups, photos, setCompositeUrl, setError]);
+
     const handleDownload = () => {
-        // For now just download the base photo
-        if (basePhoto) {
-            const link = document.createElement('a');
-            link.href = basePhoto.url;
-            link.download = `besttake-${Date.now()}.jpg`;
-            link.click();
-        }
+        const downloadUrl = compositeUrl || basePhoto?.url;
+        if (!downloadUrl) return;
+
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = `besttake-${Date.now()}.jpg`;
+        link.click();
     };
 
     const handleShare = async () => {
-        if (!basePhoto || !navigator.share) return;
+        const shareUrl = compositeUrl || basePhoto?.url;
+        if (!shareUrl || !navigator.share) return;
 
         try {
-            const blob = await fetch(basePhoto.url).then(r => r.blob());
+            const blob = await fetch(shareUrl).then(r => r.blob());
             const file = new File([blob], 'besttake.jpg', { type: 'image/jpeg' });
             await navigator.share({
                 files: [file],
@@ -63,15 +108,15 @@ export function FaceSelector() {
     }
 
     return (
-        <div className="flex flex-col h-[calc(100vh-8rem)] animate-in fade-in duration-500">
+        <div className="flex flex-col h-[calc(100vh-8rem)]">
 
             {/* Top Action Bar */}
-            <div className="flex items-center justify-between px-4 py-3 bg-surface/50 backdrop-blur-md rounded-xl mb-4">
+            <div className="flex items-center justify-between px-4 py-3 bg-surface border border-black/10 rounded-xl mb-4 shadow-sm">
                 <div className="flex items-center gap-2">
                     <button
                         onClick={undo}
                         disabled={undoStack.length === 0}
-                        className="p-2 rounded-lg hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        className="p-2 rounded-lg hover:bg-black/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                         title="Undo"
                     >
                         <Undo2 size={18} />
@@ -79,7 +124,7 @@ export function FaceSelector() {
                     <button
                         onClick={redo}
                         disabled={redoStack.length === 0}
-                        className="p-2 rounded-lg hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        className="p-2 rounded-lg hover:bg-black/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                         title="Redo"
                     >
                         <Redo2 size={18} />
@@ -90,7 +135,7 @@ export function FaceSelector() {
                     onClick={() => setComparing(!isComparing)}
                     className={cn(
                         "flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors text-sm",
-                        isComparing ? "bg-accent text-white" : "bg-white/10 hover:bg-white/20"
+                        isComparing ? "bg-accent/10 text-accent" : "bg-black/5 hover:bg-black/10"
                     )}
                 >
                     {isComparing ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -100,7 +145,7 @@ export function FaceSelector() {
                 <div className="flex items-center gap-2">
                     <button
                         onClick={reset}
-                        className="p-2 rounded-lg hover:bg-white/10 text-secondary-text hover:text-white transition-colors"
+                    className="p-2 rounded-lg hover:bg-black/5 text-secondary-text hover:text-foreground transition-colors"
                         title="Reset"
                     >
                         <RotateCcw size={18} />
@@ -109,25 +154,12 @@ export function FaceSelector() {
             </div>
 
             {/* Main Photo Area */}
-            <div className="flex-1 relative bg-neutral-950 rounded-2xl overflow-hidden flex items-center justify-center p-4">
-                <div
-                    className="relative transition-all duration-700 ease-in-out inline-block"
-                    style={selectedPersonId ? {
-                        transform: `scale(2.5) translate(${(() => {
-                            const group = faceGroups.find(g => g.personId === selectedPersonId);
-                            const face = group?.faces.find(f => f.photoId === basePhoto.id);
-                            if (!face) return '0%, 0%';
-                            const centerX = face.boundingBox.x + face.boundingBox.width / 2;
-                            const centerY = face.boundingBox.y + face.boundingBox.height / 2;
-                            return `${(0.5 - centerX) * 100}%, ${(0.5 - centerY) * 100}%`;
-                        })()})`,
-                        transformOrigin: 'center center'
-                    } : {}}
-                >
+            <div className="flex-1 relative bg-surface border border-black/10 rounded-2xl overflow-hidden flex items-center justify-center p-4 shadow-sm">
+                <div className="relative inline-block">
                     <img
-                        src={basePhoto.url}
+                        src={isComparing || !compositeUrl ? basePhoto.url : compositeUrl}
                         alt="Base photo"
-                        className="max-w-full max-h-[70vh] block pointer-events-none rounded-lg shadow-2xl"
+                        className="max-w-full max-h-[70vh] block pointer-events-none rounded-lg shadow-sm"
                     />
 
                     {/* Face highlight overlays */}
@@ -139,28 +171,27 @@ export function FaceSelector() {
                         const isThisPersonSelected = selectedPersonId === group.personId;
 
                         // ASPECT-RATIO AWARE CIRCLE MATH
-                        const ar = basePhoto.width / basePhoto.height;
-                        const highlightSize = Math.max(bb.width, bb.height / ar) * 1.25;
-
-                        const hleft = bb.x + (bb.width / 2) - (highlightSize / 2);
-                        const htop = bb.y + (bb.height / 2) - (highlightSize / 2) * ar;
+                        const padding = 0.06;
+                        const hleft = Math.max(0, bb.x - bb.width * padding);
+                        const htop = Math.max(0, bb.y - bb.height * padding);
+                        const hwidth = Math.min(1 - hleft, bb.width * (1 + padding * 2));
+                        const hheight = Math.min(1 - htop, bb.height * (1 + padding * 2));
 
                         return (
                             <button
                                 key={group.personId}
                                 onClick={() => setSelectedPersonId(isThisPersonSelected ? null : group.personId)}
                                 className={cn(
-                                    "absolute border-2 transition-all duration-300 cursor-pointer rounded-full",
+                                    "absolute border transition-all duration-200 cursor-pointer rounded-xl",
                                     isThisPersonSelected
-                                        ? "border-accent ring-[8px] ring-accent/30 bg-accent/5 shadow-[0_0_60px_rgba(59,130,246,0.9)]"
-                                        : "border-white/30 hover:border-white/70 hover:bg-white/10"
+                                        ? "border-accent bg-accent/10 shadow-sm"
+                                        : "border-black/20 hover:border-black/40 hover:bg-black/5"
                                 )}
                                 style={{
                                     left: `${hleft * 100}%`,
                                     top: `${htop * 100}%`,
-                                    width: `${highlightSize * 100}%`,
-                                    aspectRatio: '1/1',
-                                    transform: isThisPersonSelected ? 'scale(1.1)' : 'scale(1)',
+                                    width: `${hwidth * 100}%`,
+                                    height: `${hheight * 100}%`,
                                     zIndex: isThisPersonSelected ? 20 : 10
                                 }}
                             />
@@ -170,21 +201,22 @@ export function FaceSelector() {
             </div>
 
             {/* Face Strip */}
-            <div className="mt-4 bg-surface/50 backdrop-blur-md rounded-xl p-4">
+            <div className="mt-4 bg-surface border border-black/10 rounded-xl p-4 shadow-sm">
                 <div className="flex items-center gap-3 overflow-x-auto pb-2">
                     <span className="text-xs text-secondary-text flex-shrink-0">People:</span>
 
                     {faceGroups.map((group) => {
-                        // Show best face for each person
                         const bestFace = group.faces.find(f => f.id === group.bestFaceId) || group.faces[0];
                         const isSelected = selectedPersonId === group.personId;
+                        const facePhoto = photos.find((p) => p.id === bestFace.photoId) || basePhoto;
+                        const aspectRatio = facePhoto.width / facePhoto.height;
 
                         return (
                             <FaceThumbnail
                                 key={group.personId}
                                 imageUrl={bestFace?.thumbnailUrl || basePhoto.url}
                                 boundingBox={bestFace?.boundingBox}
-                                aspectRatio={basePhoto.width / basePhoto.height}
+                                aspectRatio={aspectRatio}
                                 isSelected={isSelected}
                                 onClick={() => setSelectedPersonId(isSelected ? null : group.personId)}
                             />
@@ -194,7 +226,7 @@ export function FaceSelector() {
 
                 {/* Face Variations */}
                 {selectedPersonGroup && (
-                    <div className="mt-4 pt-4 border-t border-white/10">
+                    <div className="mt-4 pt-4 border-t border-black/10">
                         <div className="text-xs text-secondary-text mb-3">
                             Select best expression:
                         </div>
@@ -202,13 +234,15 @@ export function FaceSelector() {
                             {selectedPersonGroup.faces.map((face) => {
                                 const isCurrentSelection = currentSelection?.selectedFaces[selectedPersonGroup.personId] === face.id;
                                 const isBestMatch = face.id === selectedPersonGroup.bestFaceId;
+                                const facePhoto = photos.find((p) => p.id === face.photoId) || basePhoto;
+                                const aspectRatio = facePhoto.width / facePhoto.height;
 
                                 return (
                                     <div key={face.id} className="flex flex-col items-center gap-1">
                                         <FaceThumbnail
                                             imageUrl={face.thumbnailUrl}
                                             boundingBox={face.boundingBox}
-                                            aspectRatio={basePhoto.width / basePhoto.height}
+                                            aspectRatio={aspectRatio}
                                             isSelected={isCurrentSelection}
                                             isHighlighted={isBestMatch && !isCurrentSelection}
                                             confidence={face.confidence}
@@ -230,16 +264,19 @@ export function FaceSelector() {
             <div className="mt-4 flex items-center justify-between">
                 <button
                     onClick={reset}
-                    className="text-secondary-text hover:text-white transition-colors text-sm"
+                    className="text-secondary-text hover:text-foreground transition-colors text-sm"
                 >
                     Start Over
                 </button>
 
                 <div className="flex items-center gap-3">
+                    {isCompositing && (
+                        <span className="text-xs text-secondary-text">Updating preview...</span>
+                    )}
                     {typeof navigator !== 'undefined' && 'share' in navigator && (
                         <button
                             onClick={handleShare}
-                            className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl transition-colors"
+                            className="flex items-center gap-2 px-4 py-2 bg-black/5 hover:bg-black/10 rounded-xl transition-colors"
                         >
                             <Share2 size={18} />
                             <span>Share</span>
@@ -248,7 +285,7 @@ export function FaceSelector() {
 
                     <button
                         onClick={handleDownload}
-                        className="flex items-center gap-2 px-6 py-2 bg-accent hover:bg-accent/90 rounded-xl font-medium transition-colors"
+                        className="flex items-center gap-2 px-6 py-2 bg-accent hover:bg-accent/90 rounded-xl font-medium text-white transition-colors"
                     >
                         <Download size={18} />
                         <span>Download</span>

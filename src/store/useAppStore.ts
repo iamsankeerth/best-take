@@ -22,10 +22,15 @@ interface AppState {
     undoStack: FaceSelection[];
     redoStack: FaceSelection[];
 
+    initializeSelection: (basePhotoId: string, groups: FaceGroup[]) => void;
     selectFace: (personId: string, faceId: string) => void;
     setBasePhoto: (photoId: string) => void;
     undo: () => void;
     redo: () => void;
+
+    // Composite
+    compositeUrl: string | null;
+    setCompositeUrl: (url: string | null) => void;
 
     // UI State
     processingStage: ProcessingStage;
@@ -47,7 +52,7 @@ const customStorage = {
         try {
             if (typeof window === 'undefined') return null;
             return localStorage.getItem(name);
-        } catch (e) {
+        } catch {
             return null;
         }
     },
@@ -56,7 +61,7 @@ const customStorage = {
             if (typeof window !== 'undefined') {
                 localStorage.setItem(name, value);
             }
-        } catch (e) {
+        } catch {
             // ignore
         }
     },
@@ -65,7 +70,7 @@ const customStorage = {
             if (typeof window !== 'undefined') {
                 localStorage.removeItem(name);
             }
-        } catch (e) {
+        } catch {
             // ignore
         }
     },
@@ -94,10 +99,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     addPhotos: (newPhotos) => set((state) => ({
         photos: [...state.photos, ...newPhotos]
     })),
-    removePhoto: (id) => set((state) => ({
-        photos: state.photos.filter((p) => p.id !== id)
-    })),
-    clearPhotos: () => set({ photos: [], faceGroups: [], currentSelection: null }),
+    removePhoto: (id) => set((state) => {
+        const photo = state.photos.find((p) => p.id === id);
+        if (photo) URL.revokeObjectURL(photo.url);
+        return { photos: state.photos.filter((p) => p.id !== id) };
+    }),
+    clearPhotos: () => set((state) => {
+        for (const photo of state.photos) {
+            URL.revokeObjectURL(photo.url);
+        }
+        if (state.compositeUrl) {
+            URL.revokeObjectURL(state.compositeUrl);
+        }
+        return { photos: [], faceGroups: [], currentSelection: null, compositeUrl: null };
+    }),
 
     faceGroups: [],
     setFaceGroups: (groups) => set({ faceGroups: groups }),
@@ -105,6 +120,23 @@ export const useAppStore = create<AppState>((set, get) => ({
     currentSelection: null,
     undoStack: [],
     redoStack: [],
+
+    initializeSelection: (basePhotoId, groups) => {
+        const selectedFaces: Record<string, string> = {};
+        for (const group of groups) {
+            selectedFaces[group.personId] = group.bestFaceId;
+        }
+
+        set({
+            currentSelection: {
+                basePhotoId,
+                selectedFaces,
+                timestamp: new Date()
+            },
+            undoStack: [],
+            redoStack: []
+        });
+    },
 
     selectFace: (personId, faceId) => {
         const { currentSelection, undoStack } = get();
@@ -130,18 +162,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     },
 
     setBasePhoto: (photoId) => {
-        // Initialize selection if not exists
         const { currentSelection } = get();
-        if (currentSelection && currentSelection.basePhotoId === photoId) return;
+        if (!currentSelection) return;
+        if (currentSelection.basePhotoId === photoId) return;
 
         set({
             currentSelection: {
+                ...currentSelection,
                 basePhotoId: photoId,
-                selectedFaces: {}, // Start with empty overrides? Or auto-fill?
                 timestamp: new Date()
-            },
-            undoStack: [],
-            redoStack: []
+            }
         });
     },
 
@@ -169,6 +199,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         });
     },
 
+    compositeUrl: null,
+    setCompositeUrl: (url) => set((state) => {
+        if (state.compositeUrl && state.compositeUrl !== url) {
+            URL.revokeObjectURL(state.compositeUrl);
+        }
+        return { compositeUrl: url };
+    }),
+
     processingStage: 'idle',
     setProcessingStage: (stage) => set({ processingStage: stage }),
 
@@ -178,15 +216,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     isComparing: false,
     setComparing: (isComparing) => set({ isComparing }),
 
-    reset: () => {
-        set({
+    reset: () => set((state) => {
+        for (const photo of state.photos) {
+            URL.revokeObjectURL(photo.url);
+        }
+        if (state.compositeUrl) {
+            URL.revokeObjectURL(state.compositeUrl);
+        }
+        return {
             photos: [],
             faceGroups: [],
             currentSelection: null,
             undoStack: [],
             redoStack: [],
             processingStage: 'idle',
-            error: null
-        });
-    }
+            error: null,
+            compositeUrl: null
+        };
+    })
 }));

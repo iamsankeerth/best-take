@@ -60,16 +60,16 @@ export function ProcessingOverlay({ stage, progress }: ProcessingOverlayProps) {
     };
 
     return (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm flex flex-col items-center justify-center">
             <div className="w-16 h-16 border-4 border-accent border-t-transparent rounded-full animate-spin mb-6" />
 
-            <h3 className="text-xl font-bold text-white mb-2">
+            <h3 className="text-xl font-semibold text-foreground mb-2">
                 {stageMessages[stage] || 'Processing...'}
             </h3>
 
             {progress !== undefined && (
                 <div className="w-64 mt-4">
-                    <div className="h-2 bg-surface rounded-full overflow-hidden">
+                    <div className="h-2 bg-black/10 rounded-full overflow-hidden">
                         <div
                             className="h-full bg-accent transition-all duration-300 rounded-full"
                             style={{ width: `${progress}%` }}

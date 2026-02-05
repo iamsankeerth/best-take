@@ -15,6 +15,12 @@ export interface GeminiDetectedFace {
   box_2d: [number, number, number, number]; // [ymin, xmin, ymax, xmax]
   score: number;
   label?: string;
+  landmarks?: {
+    left_eye: [number, number]; // [x, y] in 0-1000
+    right_eye: [number, number];
+    nose: [number, number];
+    mouth: [number, number];
+  };
 }
 
 export interface FaceDetectionResult {
@@ -44,7 +50,8 @@ export async function detectFacesInPhotos(
     2. GEOMETRY: Provide a PERFECT SQUARE box. 
     3. COVERAGE: Box must include eyes, nose, and mouth. DO NOT include hair, ears, or neck.
     4. COORDINATES: [ymin, xmin, ymax, xmax] in 0-1000 scale.
-    5. DATA ONLY: Return ONLY the JSON. No conversational text.
+    5. LANDMARKS: Return left_eye, right_eye, nose, mouth as [x, y] in 0-1000 scale.
+    6. DATA ONLY: Return ONLY the JSON. No conversational text.
 
     JSON FORMAT:
     {
@@ -53,6 +60,12 @@ export async function detectFacesInPhotos(
           "personId": "person_1",
           "photoIndex": 0,
           "box_2d": [ymin, xmin, ymax, xmax],
+          "landmarks": {
+            "left_eye": [x, y],
+            "right_eye": [x, y],
+            "nose": [x, y],
+            "mouth": [x, y]
+          },
           "score": 0.98,
           "label": "smiling"
         }
