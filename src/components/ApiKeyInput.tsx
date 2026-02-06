@@ -10,12 +10,66 @@ export function ApiKeyInput() {
     const [inputValue, setInputValue] = useState('');
     const [isVisible, setIsVisible] = useState(false);
     const [isFocused, setIsFocused] = useState(false);
+    const [isValidating, setIsValidating] = useState(false);
+    const [validationStatus, setValidationStatus] = useState<'idle' | 'ok' | 'error'>('idle');
+    const [validationMessage, setValidationMessage] = useState('');
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (inputValue.trim().length > 0) {
-            setApiKey(inputValue.trim());
+            handleValidateAndSave();
         }
+    };
+
+    const getFriendlyError = (raw: string) => {
+        if (!raw) return 'Invalid API key or API not enabled.';
+        if (raw.includes('API keys are not supported')) {
+            return 'This looks like a Vertex/Cloud-only endpoint. Use a Gemini API key from Google AI Studio.';
+        }
+        if (raw.includes('PERMISSION_DENIED') || raw.includes('permission')) {
+            return 'Permission denied. Verify the API key and that the Generative Language API is enabled.';
+        }
+        return raw;
+    };
+
+    const validateKey = async () => {
+        const key = inputValue.trim();
+        if (!key) return;
+
+        setIsValidating(true);
+        setValidationStatus('idle');
+        setValidationMessage('');
+
+        try {
+            const res = await fetch('/api/gemini/validate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ apiKey: key })
+            });
+            const data = await res.json();
+            if (data.ok) {
+                setValidationStatus('ok');
+                setValidationMessage('API key is valid.');
+                return true;
+            }
+
+            const friendly = getFriendlyError(data.message || 'Invalid API key.');
+            setValidationStatus('error');
+            setValidationMessage(friendly);
+            return false;
+        } catch (err) {
+            console.error('Key validation failed', err);
+            setValidationStatus('error');
+            setValidationMessage('Validation failed. Check your internet connection.');
+            return false;
+        } finally {
+            setIsValidating(false);
+        }
+    };
+
+    const handleValidateAndSave = async () => {
+        const ok = await validateKey();
+        if (ok) setApiKey(inputValue.trim());
     };
 
     if (apiKey) return null;
@@ -57,15 +111,38 @@ export function ApiKeyInput() {
                     </button>
                 </div>
 
-                <button
-                    type="submit"
-                    disabled={inputValue.length < 10}
-                    className="w-full bg-accent hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-3 rounded-xl transition-all flex items-center justify-center gap-2"
-                >
-                    <span>Continue</span>
-                    <ChevronRight size={18} />
-                </button>
+                <div className="flex items-center gap-3">
+                    <button
+                        type="button"
+                        onClick={validateKey}
+                        disabled={inputValue.length < 10 || isValidating}
+                        className="flex-1 bg-white border border-black/10 hover:border-black/20 disabled:opacity-50 disabled:cursor-not-allowed text-foreground font-medium py-3 rounded-xl transition-all"
+                    >
+                        {isValidating ? 'Validating...' : 'Validate Key'}
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={inputValue.length < 10 || isValidating}
+                        className="flex-1 bg-accent hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-3 rounded-xl transition-all flex items-center justify-center gap-2"
+                    >
+                        <span>Continue</span>
+                        <ChevronRight size={18} />
+                    </button>
+                </div>
             </form>
+
+            {validationStatus !== 'idle' && (
+                <div
+                    className={cn(
+                        "mt-4 text-xs px-3 py-2 rounded-lg border",
+                        validationStatus === 'ok'
+                            ? "border-green-200 bg-green-50 text-green-700"
+                            : "border-red-200 bg-red-50 text-red-700"
+                    )}
+                >
+                    {validationMessage}
+                </div>
+            )}
 
             <div className="mt-6 text-center">
                 <a

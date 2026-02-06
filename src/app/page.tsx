@@ -1,26 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { ApiKeyInput } from '@/components/ApiKeyInput';
+import { useEffect } from 'react';
 import { PhotoUpload } from '@/components/PhotoUpload';
 import { FaceSelector } from '@/components/FaceSelector';
 import { ProcessingOverlay } from '@/components/ProgressSteps';
 import { useAppStore } from '@/store/useAppStore';
-import { ImageIcon, Settings, Trash2 } from 'lucide-react';
+import { ImageIcon } from 'lucide-react';
 
-type AppStep = 'api-key' | 'upload' | 'processing' | 'edit';
+type AppStep = 'upload' | 'processing' | 'edit';
 
 export default function Home() {
   const {
-    apiKey,
     initialize,
     faceGroups,
-    processingStage,
-    clearApiKey,
-    reset
+    processingStage
   } = useAppStore();
-
-  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     initialize();
@@ -28,7 +22,6 @@ export default function Home() {
 
   // Determine current step
   const getCurrentStep = (): AppStep => {
-    if (!apiKey) return 'api-key';
     if (processingStage !== 'idle' && processingStage !== 'complete' && processingStage !== 'error') {
       return 'processing';
     }
@@ -37,12 +30,6 @@ export default function Home() {
   };
 
   const currentStep = getCurrentStep();
-
-  const handleClearApiKey = () => {
-    clearApiKey();
-    reset();
-    setShowSettings(false);
-  };
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -60,46 +47,14 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {apiKey && (
-              <>
-                <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-surface rounded-full border border-black/10 text-xs text-secondary-text">
-                  <span className="w-2 h-2 bg-green-500 rounded-full" />
-                  API Connected
-                </div>
-                <button
-                  onClick={() => setShowSettings(!showSettings)}
-                  className="p-2 rounded-lg hover:bg-black/5 transition-colors text-secondary-text"
-                >
-                  <Settings size={18} />
-                </button>
-              </>
-            )}
+          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-surface rounded-full border border-black/10 text-xs text-secondary-text">
+            <span className="w-2 h-2 bg-green-500 rounded-full" />
+            Local AI Ready
           </div>
         </header>
 
-        {/* Settings Dropdown */}
-        {showSettings && (
-          <div className="absolute right-6 top-20 w-64 bg-surface border border-black/10 rounded-xl p-4 shadow-lg z-50 animate-in slide-in-from-top-2 duration-200">
-            <h3 className="text-sm font-medium mb-3">Settings</h3>
-            <button
-              onClick={handleClearApiKey}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-            >
-              <Trash2 size={16} />
-              Clear API Key
-            </button>
-          </div>
-        )}
-
         {/* Main Content */}
         <div className="min-h-[calc(100vh-8rem)]">
-          {currentStep === 'api-key' && (
-            <div className="flex items-center justify-center h-[60vh]">
-              <ApiKeyInput />
-            </div>
-          )}
-
           {currentStep === 'upload' && (
             <PhotoUpload />
           )}
@@ -115,14 +70,6 @@ export default function Home() {
         )}
 
       </div>
-
-      {/* Click outside to close settings */}
-      {showSettings && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setShowSettings(false)}
-        />
-      )}
     </main>
   );
 }

@@ -5,7 +5,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { Upload, X, AlertCircle, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getImageDimensions, resizeImage } from '@/lib/imageUtils';
-import { detectFacesInPhotos } from '@/lib/gemini';
+import { detectFacesLocally } from '@/lib/localFace';
 import { Photo, FaceGroup, DetectedFace } from '@/types';
 
 export function PhotoUpload() {
@@ -13,7 +13,6 @@ export function PhotoUpload() {
         photos,
         addPhotos,
         removePhoto,
-        apiKey,
         setProcessingStage,
         setFaceGroups,
         initializeSelection,
@@ -155,89 +154,22 @@ export function PhotoUpload() {
     };
 
     const handleFindBestTakes = async () => {
-        if (!apiKey || photos.length < 2) return;
+        if (photos.length < 2) return;
 
         try {
             setProcessingStage('analyzing');
             setError(null);
             setCompositeUrl(null);
 
-            const result = await detectFacesInPhotos(
-                apiKey,
-                photos.map(p => p.file)
-            );
+            const allFaces = await detectFacesLocally(photos);
 
             setProcessingStage('comparing');
 
-            const groupedByPerson = new Map<string, DetectedFace[]>();
-            const allFaces: DetectedFace[] = [];
-
-            if (!result.faces || !Array.isArray(result.faces)) {
-                throw new Error('Invalid response from AI: No faces detected.');
+            if (!allFaces.length) {
+                throw new Error('No faces detected. Try different photos or better lighting.');
             }
 
-            for (const item of result.faces) {
-                const personId = item.personId || `person_${Math.random().toString(36).slice(2, 10)}`;
-                if (!groupedByPerson.has(personId)) {
-                    groupedByPerson.set(personId, []);
-                }
-
-                const photoIndex = typeof item.photoIndex === 'number' ? item.photoIndex : 0;
-                const photo = photos[photoIndex];
-                if (!photo) continue;
-
-                if (!Array.isArray(item.box_2d) || item.box_2d.length < 4) {
-                    console.warn('Invalid box_2d format for face', item);
-                    continue;
-                }
-
-                const [ymin, xmin, ymax, xmax] = item.box_2d;
-
-                const landmarks = item.landmarks ? {
-                    leftEye: { x: item.landmarks.left_eye[0] / 1000, y: item.landmarks.left_eye[1] / 1000 },
-                    rightEye: { x: item.landmarks.right_eye[0] / 1000, y: item.landmarks.right_eye[1] / 1000 },
-                    nose: { x: item.landmarks.nose[0] / 1000, y: item.landmarks.nose[1] / 1000 },
-                    mouth: { x: item.landmarks.mouth[0] / 1000, y: item.landmarks.mouth[1] / 1000 }
-                } : undefined;
-
-                const mappedFace: DetectedFace = {
-                    id: crypto.randomUUID(),
-                    photoId: photo.id,
-                    boundingBox: {
-                        x: xmin / 1000,
-                        y: ymin / 1000,
-                        width: (xmax - xmin) / 1000,
-                        height: (ymax - ymin) / 1000
-                    },
-                    thumbnailUrl: photo.url,
-                    confidence: item.score ?? 0.8,
-                    landmarks
-                };
-
-                groupedByPerson.get(personId)!.push(mappedFace);
-                allFaces.push(mappedFace);
-            }
-
-            let faceGroups: FaceGroup[] = [];
-            groupedByPerson.forEach((faces, personId) => {
-                const bestFace = faces.reduce((best, face) =>
-                    face.confidence > best.confidence ? face : best, faces[0]);
-
-                faceGroups.push({
-                    personId,
-                    faces,
-                    bestFaceId: bestFace.id
-                });
-            });
-
-            const multiPhotoGroupExists = faceGroups.some((group) => {
-                const photoSet = new Set(group.faces.map((f) => f.photoId));
-                return photoSet.size > 1;
-            });
-
-            if (!multiPhotoGroupExists || faceGroups.length === allFaces.length) {
-                faceGroups = buildFaceGroupsByPosition(allFaces, photos);
-            }
+            const faceGroups: FaceGroup[] = buildFaceGroupsByPosition(allFaces, photos);
 
             setFaceGroups(faceGroups);
 

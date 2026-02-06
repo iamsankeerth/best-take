@@ -79,3 +79,37 @@ export function canvasToBlob(canvas: HTMLCanvasElement, quality: number = 0.92):
         }, 'image/jpeg', quality);
     });
 }
+
+export async function cropBoundingBoxToBlob(
+    imageUrl: string,
+    box: { x: number; y: number; width: number; height: number },
+    padding: number = 0.2,
+    quality: number = 0.95
+): Promise<Blob> {
+    const img = await loadImage(imageUrl);
+    const imgW = img.width;
+    const imgH = img.height;
+
+    const padX = box.width * padding;
+    const padY = box.height * padding;
+
+    const nx = clamp(box.x - padX, 0, 1);
+    const ny = clamp(box.y - padY, 0, 1);
+    const nw = clamp(box.width + padX * 2, 0.02, 1 - nx);
+    const nh = clamp(box.height + padY * 2, 0.02, 1 - ny);
+
+    const sx = Math.round(nx * imgW);
+    const sy = Math.round(ny * imgH);
+    const sw = Math.max(1, Math.round(nw * imgW));
+    const sh = Math.max(1, Math.round(nh * imgH));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = sw;
+    canvas.height = sh;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas context not available');
+
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+    return canvasToBlob(canvas, quality);
+}

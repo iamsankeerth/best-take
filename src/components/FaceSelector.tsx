@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { FaceThumbnail } from './FaceThumbnail';
 import { cn } from '@/lib/utils';
-import { Undo2, Redo2, RotateCcw, Download, Share2, Eye, EyeOff } from 'lucide-react';
-import { buildCompositeImage } from '@/lib/compositor';
+import { Undo2, Redo2, RotateCcw, Download, Share2, Eye, EyeOff, Wand2 } from 'lucide-react';
+import { cropBoundingBoxToBlob } from '@/lib/imageUtils';
+import { editWithQwen } from '@/lib/qwen';
 
 export function FaceSelector() {
     const {
@@ -26,8 +27,7 @@ export function FaceSelector() {
     } = useAppStore();
 
     const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
-    const [isCompositing, setIsCompositing] = useState(false);
-    const lastCompositeRun = useRef(0);
+    const [isEditing, setIsEditing] = useState(false);
 
     useEffect(() => {
         if (faceGroups.length > 0) {
@@ -41,37 +41,52 @@ export function FaceSelector() {
     // Get faces for selected person
     const selectedPersonGroup = faceGroups.find(g => g.personId === selectedPersonId);
 
-    useEffect(() => {
-        if (!basePhoto || !currentSelection || faceGroups.length === 0) return;
+    const selectedFace = useMemo(() => {
+        if (!selectedPersonGroup) return null;
+        const selectedFaceId = currentSelection?.selectedFaces[selectedPersonGroup.personId] || selectedPersonGroup.bestFaceId;
+        return selectedPersonGroup.faces.find((f) => f.id === selectedFaceId) || null;
+    }, [currentSelection, selectedPersonGroup]);
 
-        let cancelled = false;
-        const runId = ++lastCompositeRun.current;
-        const build = async () => {
-            try {
-                setIsCompositing(true);
+    const handleApplyEdit = async () => {
+        if (!basePhoto || !selectedFace) return;
+        if (isEditing) return;
 
-                const blob = await buildCompositeImage(photos, faceGroups, currentSelection);
-                if (cancelled || runId !== lastCompositeRun.current) return;
+        try {
+            setIsEditing(true);
+            setError(null);
 
-                const url = URL.createObjectURL(blob);
-                setCompositeUrl(url);
-                setError(null);
-            } catch (err: unknown) {
-                if (cancelled) return;
-                console.error('Composite failed', err);
-                const message = err instanceof Error ? err.message : 'Failed to build composite';
-                setError(message);
-            } finally {
-                if (!cancelled) setIsCompositing(false);
-            }
-        };
+            const baseBlob = compositeUrl
+                ? await fetch(compositeUrl).then((r) => r.blob())
+                : basePhoto.file;
 
-        build();
+            const refBlob = await cropBoundingBoxToBlob(
+                selectedFace.thumbnailUrl,
+                selectedFace.boundingBox,
+                0.25,
+                0.98
+            );
 
-        return () => {
-            cancelled = true;
-        };
-    }, [basePhoto, currentSelection, faceGroups, photos, setCompositeUrl, setError]);
+            const maxEdge = 1536;
+            const scale = Math.min(1, maxEdge / Math.max(basePhoto.width, basePhoto.height));
+            const targetWidth = Math.round(basePhoto.width * scale);
+            const targetHeight = Math.round(basePhoto.height * scale);
+
+            const resultBlob = await editWithQwen(baseBlob, [refBlob], {
+                mode: 'best_take',
+                width: targetWidth,
+                height: targetHeight
+            });
+
+            const url = URL.createObjectURL(resultBlob);
+            setCompositeUrl(url);
+        } catch (err: unknown) {
+            console.error('Qwen edit failed', err);
+            const message = err instanceof Error ? err.message : 'Failed to run Qwen edit';
+            setError(message);
+        } finally {
+            setIsEditing(false);
+        }
+    };
 
     const handleDownload = () => {
         const downloadUrl = compositeUrl || basePhoto?.url;
@@ -270,8 +285,8 @@ export function FaceSelector() {
                 </button>
 
                 <div className="flex items-center gap-3">
-                    {isCompositing && (
-                        <span className="text-xs text-secondary-text">Updating preview...</span>
+                    {isEditing && (
+                        <span className="text-xs text-secondary-text">Applying AI edit...</span>
                     )}
                     {typeof navigator !== 'undefined' && 'share' in navigator && (
                         <button
@@ -282,6 +297,15 @@ export function FaceSelector() {
                             <span>Share</span>
                         </button>
                     )}
+
+                    <button
+                        onClick={handleApplyEdit}
+                        disabled={!selectedFace || isEditing}
+                        className="flex items-center gap-2 px-5 py-2 bg-white border border-black/10 hover:border-black/20 rounded-xl font-medium text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <Wand2 size={18} />
+                        <span>Apply Best Take</span>
+                    </button>
 
                     <button
                         onClick={handleDownload}
