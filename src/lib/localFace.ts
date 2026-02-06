@@ -26,22 +26,27 @@ async function getFaceDetector() {
 export async function detectFacesLocally(photos: Photo[]): Promise<DetectedFace[]> {
     const detector = await getFaceDetector();
     const faces: DetectedFace[] = [];
+    const maxEdge = 1280;
 
     for (const photo of photos) {
         const bitmap = await createImageBitmap(photo.file);
+        const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+        const targetWidth = Math.max(1, Math.round(bitmap.width * scale));
+        const targetHeight = Math.max(1, Math.round(bitmap.height * scale));
+
         const canvas = typeof OffscreenCanvas !== 'undefined'
-            ? new OffscreenCanvas(bitmap.width, bitmap.height)
+            ? new OffscreenCanvas(targetWidth, targetHeight)
             : document.createElement('canvas');
 
-        canvas.width = bitmap.width;
-        canvas.height = bitmap.height;
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
         const ctx = canvas.getContext('2d');
         if (!ctx) {
             bitmap.close?.();
             throw new Error('Canvas context not available for local face detection.');
         }
-        ctx.drawImage(bitmap, 0, 0);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
+        const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
 
         let result;
         try {
@@ -49,7 +54,8 @@ export async function detectFacesLocally(photos: Photo[]): Promise<DetectedFace[
         } catch (err) {
             console.error('Local face detection failed', err);
             bitmap.close?.();
-            throw new Error('Local face detection failed. Refresh and try again.');
+            const detail = err instanceof Error ? err.message : 'Unknown error';
+            throw new Error(`Local face detection failed: ${detail}`);
         }
 
         bitmap.close?.();
@@ -59,10 +65,10 @@ export async function detectFacesLocally(photos: Photo[]): Promise<DetectedFace[
             const box = detection.boundingBox;
             if (!box) continue;
 
-            const x = box.originX / photo.width;
-            const y = box.originY / photo.height;
-            const w = box.width / photo.width;
-            const h = box.height / photo.height;
+            const x = box.originX / targetWidth;
+            const y = box.originY / targetHeight;
+            const w = box.width / targetWidth;
+            const h = box.height / targetHeight;
 
             const score = detection.categories?.[0]?.score ?? 0.8;
 
