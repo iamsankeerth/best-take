@@ -33,6 +33,9 @@ DEFAULT_TRUE_CFG = float(os.environ.get("QWEN_TRUE_CFG", "4.0"))
 DEFAULT_GUIDANCE = os.environ.get("QWEN_GUIDANCE", "")
 DEFAULT_GUIDANCE = float(DEFAULT_GUIDANCE) if DEFAULT_GUIDANCE else None
 DEFAULT_MODE = os.environ.get("QWEN_MODE", "best_take").lower()
+LOW_CPU_MEM = os.environ.get("QWEN_LOW_CPU_MEM", "1") == "1"
+DEVICE_MAP = os.environ.get("QWEN_DEVICE_MAP", "").strip() or None
+OFFLOAD_DIR = os.environ.get("QWEN_OFFLOAD_DIR", "").strip()
 REWRITE_ENABLED = os.environ.get("QWEN_REWRITE_PROMPT", "0") == "1"
 REWRITER_API_BASE = os.environ.get("QWEN_REWRITER_API_BASE", "").rstrip("/")
 REWRITER_MODEL = os.environ.get("QWEN_REWRITER_MODEL", "")
@@ -131,12 +134,34 @@ def load_pipeline() -> QwenImageEditPlusPipeline:
         raise RuntimeError("CUDA is not available. Install CUDA-enabled PyTorch and an NVIDIA GPU driver.")
 
     dtype = get_dtype()
-    _pipeline = QwenImageEditPlusPipeline.from_pretrained(
-        MODEL_ID,
-        torch_dtype=dtype
-    )
+    load_kwargs = {
+        "torch_dtype": dtype,
+        "low_cpu_mem_usage": LOW_CPU_MEM
+    }
 
-    _pipeline.enable_model_cpu_offload()
+    if DEVICE_MAP:
+        load_kwargs["device_map"] = DEVICE_MAP
+        if OFFLOAD_DIR:
+            os.makedirs(OFFLOAD_DIR, exist_ok=True)
+            load_kwargs["offload_folder"] = OFFLOAD_DIR
+
+    try:
+        _pipeline = QwenImageEditPlusPipeline.from_pretrained(
+            MODEL_ID,
+            **load_kwargs
+        )
+    except OSError as exc:
+        message = str(exc).lower()
+        if "paging file is too small" in message or "memoryerror" in message:
+            raise RuntimeError(
+                "Model load failed due to low system virtual memory. "
+                "Increase Windows pagefile size (e.g., 32-64 GB) or set "
+                "QWEN_DTYPE=fp16 to reduce memory usage."
+            ) from exc
+        raise
+
+    if not DEVICE_MAP:
+        _pipeline.enable_model_cpu_offload()
     _pipeline.enable_vae_slicing()
     _pipeline.enable_attention_slicing()
 
