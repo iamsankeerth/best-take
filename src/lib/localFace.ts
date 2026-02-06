@@ -29,7 +29,29 @@ export async function detectFacesLocally(photos: Photo[]): Promise<DetectedFace[
 
     for (const photo of photos) {
         const bitmap = await createImageBitmap(photo.file);
-        const result = detector.detect(bitmap);
+        const canvas = typeof OffscreenCanvas !== 'undefined'
+            ? new OffscreenCanvas(bitmap.width, bitmap.height)
+            : document.createElement('canvas');
+
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+            bitmap.close?.();
+            throw new Error('Canvas context not available for local face detection.');
+        }
+        ctx.drawImage(bitmap, 0, 0);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+        let result;
+        try {
+            result = detector.detect(imageData);
+        } catch (err) {
+            console.error('Local face detection failed', err);
+            bitmap.close?.();
+            throw new Error('Local face detection failed. Refresh and try again.');
+        }
+
         bitmap.close?.();
 
         const detections = result?.detections || [];

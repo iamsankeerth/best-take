@@ -35,10 +35,16 @@ export async function editWithQwen(
     if (options.guidanceScale !== undefined) form.append('guidance_scale', String(options.guidanceScale));
     if (options.seed !== undefined) form.append('seed', String(options.seed));
 
-    const response = await fetch(DEFAULT_URL, {
-        method: 'POST',
-        body: form
-    });
+    let response: Response;
+    try {
+        response = await fetch(DEFAULT_URL, {
+            method: 'POST',
+            body: form
+        });
+    } catch (err) {
+        console.error('Qwen edit service not reachable', err);
+        throw new Error('Qwen edit service is not reachable. Start qwen_edit_service\\run_server.cmd and wait for the server to be ready.');
+    }
 
     if (!response.ok) {
         const detail = await response.text();
